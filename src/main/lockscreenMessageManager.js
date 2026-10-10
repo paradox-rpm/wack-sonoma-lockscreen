@@ -69,6 +69,9 @@ export class LockscreenMessageManager {
     }
 
     teardown(mainBox) {
+        if (this.scrollView && this._extension._dialogDestroyed) {
+            this.scrollView = null;
+        }
         if (this.scrollView) {
             this.scrollView.disconnectObject(this);
             if (this.scrollView.vadjustment) {

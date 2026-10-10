@@ -640,6 +640,8 @@ export class PromptStyling {
             this._entryFocusIdleId = null;
         }
         this.stopCursorBlink();
+        if (this._extension._dialogDestroyed)
+            return;
         this.clearCupertinoPromptBackground();
         this.clearBottomButtonsBackground();
     }

@@ -127,6 +127,11 @@ export default class WackLockscreenClockExtension extends Extension {
         this._themeManager.applyUserTheme();
 
         this._dialog = dialog;
+        // GNOME 46 and 51 destroy the dialog before disable() runs, so teardown must not touch its actors.
+        this._dialogDestroyed = false;
+        dialog.connectObject('destroy', () => {
+            this._dialogDestroyed = true;
+        }, this);
         this._originalClock = dialog._clock;
         this._injectionManager = new InjectionManager();
         this._idleSources = new Set();
@@ -982,11 +987,14 @@ export default class WackLockscreenClockExtension extends Extension {
             this._themeManager = null;
         }
 
-        resetAnimationActors(this._clockWrapper, this._promptActor);
-        const authPrompt = this._dialog?._authPrompt ?? this._dialog?._promptBox?._authPrompt;
-        const mainBox = authPrompt?._mainBox;
-        if (mainBox) mainBox.opacity = 255;
-        if (this._dialog) this._dialog.opacity = 255;
+        const dialogAlive = this._dialog && !this._dialogDestroyed;
+        resetAnimationActors(this._clockWrapper, dialogAlive ? this._promptActor : null);
+        if (dialogAlive) {
+            const authPrompt = this._dialog._authPrompt ?? this._dialog._promptBox?._authPrompt;
+            const mainBox = authPrompt?._mainBox;
+            if (mainBox) mainBox.opacity = 255;
+            this._dialog.opacity = 255;
+        }
 
         if (this._monitorsChangedTimeoutId) {
             GLib.source_remove(this._monitorsChangedTimeoutId);
@@ -1021,7 +1029,7 @@ export default class WackLockscreenClockExtension extends Extension {
 
 
 
-        if (this._dialog) {
+        if (this._dialog && !this._dialogDestroyed) {
             if (this._dialog._notificationsBox) {
                 this._dialog._notificationsBox.disconnectObject(this);
             }
@@ -1044,7 +1052,7 @@ export default class WackLockscreenClockExtension extends Extension {
             this._clock = null;
         }
 
-        if (this._dialog && this._originalClock) {
+        if (dialogAlive && this._originalClock) {
             this._dialog._clock = this._originalClock;
             this._dialog._stack.add_child(this._originalClock);
         }
@@ -1054,7 +1062,7 @@ export default class WackLockscreenClockExtension extends Extension {
             this._messageManager = null;
         }
 
-        if (this._mainBox && this._origLayout) {
+        if (dialogAlive && this._mainBox && this._origLayout) {
             const oldLayout = this._mainBox.layout_manager;
             this._mainBox.layout_manager = this._origLayout;
             if (oldLayout && oldLayout !== this._origLayout) oldLayout._extension = null;
@@ -1063,17 +1071,19 @@ export default class WackLockscreenClockExtension extends Extension {
         }
 
         this._dialog = null;
+        this._dialogDestroyed = false;
         this._originalClock = null;
         this._mainBox = null;
         this._origLayout = null;
         this._showingInhibitHint = false;
 
         if (this._promptActor) {
-            if (this._origPromptActorYAlign !== undefined) {
-                this._promptActor.y_align = this._origPromptActorYAlign;
-                this._origPromptActorYAlign = undefined;
+            if (dialogAlive) {
+                if (this._origPromptActorYAlign !== undefined)
+                    this._promptActor.y_align = this._origPromptActorYAlign;
+                this._promptActor.remove_style_class_name('wack-cupertino-prompt');
             }
-            this._promptActor.remove_style_class_name('wack-cupertino-prompt');
+            this._origPromptActorYAlign = undefined;
             this._promptActor = null;
         }
         this._animationState = null;
